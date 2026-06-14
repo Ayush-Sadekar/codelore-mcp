@@ -1,0 +1,23 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# codelore outputs
+*_vault/
+*_chroma/
+*_explanations.json
+
+# editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo

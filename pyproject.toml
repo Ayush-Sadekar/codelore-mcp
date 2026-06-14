@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "codelore"
+version = "0.1.0"
+description = "Generate an Obsidian vault + semantic search index from any code repository"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Ayush Sadekar", email = "ayushsadekar3@gmail.com" }]
+requires-python = ">=3.11"
+keywords = ["obsidian", "codebase", "semantic-search", "mcp", "claude", "documentation"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Documentation",
+]
+
+[project.urls]
+Homepage = "https://github.com/ayushsadekar3/codelore"
+Repository = "https://github.com/ayushsadekar3/codelore"
+Issues = "https://github.com/ayushsadekar3/codelore/issues"
+dependencies = [
+    "chromadb",
+    "mcp",
+    "tree-sitter",
+    "tree-sitter-python",
+    "tree-sitter-javascript",
+    "tree-sitter-typescript",
+    "tree-sitter-go",
+    "tree-sitter-java",
+    "tree-sitter-kotlin",
+    "tree-sitter-scala",
+    "tree-sitter-c-sharp",
+    "tree-sitter-haskell",
+    "tree-sitter-elixir",
+    "tree-sitter-lua",
+    "tree-sitter-bash",
+]
+
+[project.scripts]
+codelore = "codelore.main:main"
+codelore-mcp = "mcp_server:mcp.run"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["codelore*"]

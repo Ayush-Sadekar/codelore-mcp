@@ -1,0 +1,15 @@
+chromadb
+mcp
+tree-sitter
+tree-sitter-python
+tree-sitter-javascript
+tree-sitter-typescript
+tree-sitter-go
+tree-sitter-java
+tree-sitter-kotlin
+tree-sitter-scala
+tree-sitter-c-sharp
+tree-sitter-haskell
+tree-sitter-elixir
+tree-sitter-lua
+tree-sitter-bash
