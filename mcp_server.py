@@ -93,6 +93,18 @@ def search_code(
     behaviour. Searches a question-indexed vector database and returns the most
     relevant code chunks together with their vault summary.
 
+    FALLBACK CHAIN — if this tool returns no results or low-confidence matches:
+      1. Call the Obsidian MCP `search_simple` tool with the same query for a
+         plain-text search across vault notes.
+      2. If still no results, fall back to grepping the actual source files in
+         the repo (use repo_root from CODELORE_REPO_ROOT).
+
+    After finding results, use the Obsidian MCP `vault_read` tool to read full
+    vault notes — prefer it over `read_vault_node` for direct file reading.
+
+    GUARDRAIL: Never call the Obsidian MCP `vault_write` tool unless the user
+    explicitly requests it by name.
+
     vault_root and chroma_path are optional — if omitted, the server uses the
     CODELORE_VAULT_ROOT and CODELORE_CHROMA_PATH environment variables. Pass
     them explicitly to query a different repo without reconfiguring the server.
@@ -130,11 +142,19 @@ def search_code(
 @mcp.tool()
 def read_vault_node(node_path: str, vault_root: str = "") -> str:
     """
-    Read a single node from the vault by its path.
+    DEPRECATED — prefer the Obsidian MCP `vault_read` tool for direct vault
+    file reading. `vault_read` reads the file straight from the Obsidian vault
+    and is the canonical way to fetch a note going forward.
 
-    Use this to follow up on search results, drill into a specific file or
-    directory summary, or manually traverse the vault graph. Pass paths like
+    This tool remains available as a fallback when the Obsidian MCP is not
+    configured or when you need vault_root path resolution. Use it only if
+    `vault_read` is unavailable.
+
+    Reads a single node from the vault by its path. Pass paths like
     'INDEX', 'src/utils', or 'src/utils/helpers' (no .md extension needed).
+
+    GUARDRAIL: Never call the Obsidian MCP `vault_write` tool unless the user
+    explicitly requests it by name.
 
     vault_root is optional — omit to use the CODELORE_VAULT_ROOT env var, or
     pass it explicitly to read from a different repo's vault.
@@ -156,6 +176,12 @@ def explore_repo(max_depth: int = 2, vault_root: str = "") -> str:
     'give me an overview of the codebase', or 'what are the main components'.
     Starts from the vault INDEX and traverses breadth-first, returning summaries
     at increasing depth so you can understand the repo from the top down.
+
+    To drill into a specific node after this overview, use the Obsidian MCP
+    `vault_read` tool (preferred) or `read_vault_node` (fallback).
+
+    GUARDRAIL: Never call the Obsidian MCP `vault_write` tool unless the user
+    explicitly requests it by name.
 
     vault_root is optional — omit to use CODELORE_VAULT_ROOT, or pass it
     explicitly to explore a different repo's vault without reconfiguring.
@@ -216,6 +242,14 @@ def find_todos(
     open tasks'. Searches for the most relevant files via semantic search, then
     scans them for TODO/FIXME/HACK comments and shows recent git commits.
 
+    After identifying open tasks, you may use the Obsidian MCP `vault_append`
+    tool to add notes or progress updates to the relevant vault files without
+    overwriting existing content. Use `vault_read` (Obsidian MCP) to read the
+    file before appending.
+
+    GUARDRAIL: Never call the Obsidian MCP `vault_write` tool unless the user
+    explicitly requests it by name.
+
     vault_root, chroma_path, and repo_root are optional — omit to use env vars,
     or pass them explicitly to query a different repo.
     """
@@ -267,6 +301,9 @@ def read_guidelines(guidelines_path: str = "") -> str:
     Use this for questions about coding style, architectural patterns,
     conventions, how to structure new code, or what rules the project follows.
 
+    GUARDRAIL: Never call the Obsidian MCP `vault_write` tool unless the user
+    explicitly requests it by name.
+
     guidelines_path is optional — omit to use CODELORE_GUIDELINES_PATH, or
     pass a path directly to read any guidelines document without reconfiguring.
     """
@@ -280,6 +317,67 @@ def read_guidelines(guidelines_path: str = "") -> str:
     if not p.exists():
         return f"Guidelines file not found: {path}"
     return p.read_text(encoding="utf-8")
+
+
+@mcp.tool()
+def vault_append(
+    query: str,
+    vault_root: str = "",
+    chroma_path: str = "",
+) -> str:
+    """
+    Find the most relevant vault note for a user's annotation query and return
+    its path so the Obsidian MCP `vault_append` tool can safely append to it.
+
+    Use this when the user wants to add notes, progress updates, or observations
+    to a vault file based on what they're currently doing — for example:
+    'add a note about the parser edge case', 'mark this TODO as resolved',
+    'append my findings on the auth module'.
+
+    WORKFLOW:
+      1. This tool resolves the target vault note path via semantic search.
+      2. Use the Obsidian MCP `vault_read` tool to read the current content of
+         that file before appending.
+      3. Use the Obsidian MCP `vault_append` tool to add the new content to the
+         end of the file. `vault_append` never overwrites existing content.
+
+    GUARDRAIL: Use `vault_append` (Obsidian MCP) for all note additions.
+    Never call the Obsidian MCP `vault_write` tool unless the user explicitly
+    requests it by name — `vault_write` overwrites the entire file.
+
+    Returns the resolved vault note path and a short summary of the note's
+    existing content so you can craft a contextual append.
+
+    vault_root and chroma_path are optional — omit to use env vars.
+    """
+    results = search_chunks(query, _chroma_path(chroma_path), n_results=1)
+    if not results:
+        return (
+            "No relevant vault note found for that query. "
+            "Check that the repo has been ingested, then use the Obsidian MCP "
+            "`vault_append` tool with a manual path if you know the target file."
+        )
+
+    vr = _vault_root(vault_root)
+    best = results[0]
+    vault_md = Path(best.markdown_path)
+
+    existing_snippet = ""
+    if vault_md.exists():
+        content = vault_md.read_text(encoding="utf-8")
+        lines = content.splitlines()
+        existing_snippet = "\n".join(lines[:20])
+
+    rel_path = vault_md.relative_to(vr) if vault_md.is_relative_to(vr) else vault_md
+    return (
+        f"**Target vault note:** `{rel_path}`\n"
+        f"**Full path:** `{vault_md}`\n\n"
+        f"**Existing content (first 20 lines):**\n```\n{existing_snippet}\n```\n\n"
+        f"Next steps:\n"
+        f"1. Use Obsidian MCP `vault_read` to read the full note if needed.\n"
+        f"2. Use Obsidian MCP `vault_append` with path `{rel_path}` to add your content.\n"
+        f"   `vault_append` is safe — it appends only and never overwrites."
+    )
 
 
 # ---------------------------------------------------------------------------

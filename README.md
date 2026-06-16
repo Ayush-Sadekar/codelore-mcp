@@ -138,12 +138,36 @@ Add to `.claude/settings.json` (project) or `~/.claude/settings.json` (global):
 | `search_code` | "how does X work?", "where is Y defined?" |
 | `explore_repo` | "explain this codebase", "give me an overview" |
 | `find_todos` | "what's left to implement?", "show open tasks" |
-| `read_vault_node` | "show me the summary for src/auth" |
+| `vault_append` | "add a note about X", "append my findings to the auth module" |
+| `read_vault_node` | _(deprecated — use Obsidian MCP `vault_read` instead)_ |
 | `read_guidelines` | architectural guidelines doc (optional) |
 | `estimate_cost` | "how many claude calls would this take?" |
 | `ingest_repo` | "ingest this repo" |
 | `rebuild_vault` | rebuild vault from saved explanations |
 | `sync_vault` | incremental re-index after code changes |
+
+---
+
+## Obsidian MCP integration (recommended)
+
+codelore generates an Obsidian-compatible vault, and several codelore tools are designed to hand off to the **Obsidian Local REST API MCP** for direct vault operations. Setting this up unlocks:
+
+- **`vault_read`** — read any vault note directly (replaces the deprecated `read_vault_node`)
+- **`vault_append`** — safely append notes to existing vault files without overwriting
+- **`search_simple`** — plain-text search across your vault as a fallback when semantic search returns no results
+
+### Setup
+
+1. Install the Obsidian Local REST API plugin: [github.com/coddingtonbear/obsidian-local-rest-api](https://github.com/coddingtonbear/obsidian-local-rest-api)
+2. Enable it in Obsidian and note the API key and port it starts on.
+3. Add it as a second MCP server alongside codelore in your Claude Code config.
+
+Once both MCP servers are running, Claude will automatically use them together:
+- `search_code` (codelore) → falls back to `search_simple` (Obsidian MCP) → falls back to raw file grep
+- `vault_append` (codelore) resolves the right vault note, then calls `vault_append` (Obsidian MCP) to append safely
+- `explore_repo` and `find_todos` direct Claude to use `vault_read` (Obsidian MCP) for follow-up note reading
+
+**Note:** The Obsidian MCP `vault_write` tool overwrites files entirely and is **not used by codelore tools**. It will only be called if you explicitly ask for it by name.
 
 ---
 
