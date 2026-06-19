@@ -123,14 +123,24 @@ def _cmd_ingest(args: argparse.Namespace) -> None:
             )
             print(f"Explanations saved to {explanations_out}")
 
+        # --- parse extra frontmatter fields ---
+        extra_frontmatter: dict = {}
+        for kv in (args.frontmatter or []):
+            if "=" not in kv:
+                print(f"Warning: --frontmatter {kv!r} ignored (expected key=value)", file=sys.stderr)
+                continue
+            k, _, v = kv.partition("=")
+            extra_frontmatter[k.strip()] = v.strip()
+
         # --- build vault ---
         print(f"\nBuilding vault ...")
         index, all_nodes, warnings = build_tree(
             repo_root,
             file_explanations or {},
             dir_explanations or {},
+            extra_frontmatter or None,
         )
-        write_vault(index, all_nodes, warnings, vault_root)
+        write_vault(index, all_nodes, warnings, vault_root, extra_frontmatter or None)
 
         # --- index ChromaDB (skip in --no-llm mode) ---
         if not args.no_llm:
@@ -290,6 +300,10 @@ def main() -> None:
     p_ingest.add_argument("--explanations", metavar="PATH", help="Pre-generated explanations JSON (skips LLM summarisation)")
     p_ingest.add_argument("--dry-run", action="store_true", help="Print file count and call estimate without running")
     p_ingest.add_argument("--no-llm", action="store_true", help="Write structural vault without calling Claude")
+    p_ingest.add_argument(
+        "--frontmatter", metavar="key=value", action="append",
+        help="Extra frontmatter field added to every vault note (repeatable, e.g. --frontmatter project=myapp --frontmatter status=draft)",
+    )
 
     # query
     p_query = sub.add_parser("query", help="Semantic search over an ingested repo")

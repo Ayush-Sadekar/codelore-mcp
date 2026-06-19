@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 from .nodes import DirectoryNode, FileNode, IndexNode, Node
 from .parsers import REGISTRY
@@ -10,6 +11,7 @@ def build_tree(
     repo_root: Path,
     explanations: dict[str, str] | None = None,
     dir_explanations: dict[str, str] | None = None,
+    extra_frontmatter: dict[str, Any] | None = None,
 ) -> tuple[IndexNode, list[Node], list[str]]:
     all_nodes: list[Node] = []
     all_warnings: list[str] = []
@@ -71,13 +73,20 @@ def _ensure_ancestor_chain(rel_dir: Path, cache: dict, all_nodes: list[Node]) ->
             all_nodes.append(node)
 
 
-def write_vault(index: IndexNode, all_nodes: list[Node], warnings: list[str], vault_root: Path) -> None:
+def write_vault(
+    index: IndexNode,
+    all_nodes: list[Node],
+    warnings: list[str],
+    vault_root: Path,
+    extra_frontmatter: dict[str, Any] | None = None,
+) -> None:
     vault_root.mkdir(parents=True, exist_ok=True)
+    fm = extra_frontmatter or {}
 
     for node in [index] + all_nodes:
         out = node.vault_path(vault_root)
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(node.to_markdown(), encoding="utf-8")
+        out.write_text(node.to_markdown(fm), encoding="utf-8")
 
     if warnings:
         (vault_root / "warnings.log").write_text("\n".join(warnings) + "\n", encoding="utf-8")

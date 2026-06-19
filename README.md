@@ -48,7 +48,8 @@ pip install codelore
 Or from source:
 ```bash
 git clone https://github.com/yourname/codelore
-pip install -e codelore
+cd codelore
+pip install -e .
 ```
 
 ---

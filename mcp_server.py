@@ -481,7 +481,11 @@ def estimate_cost(repo_path: str) -> str:
 
 
 @mcp.tool()
-def ingest_repo(repo_path_or_url: str, vault_output_path: str = "") -> str:
+def ingest_repo(
+    repo_path_or_url: str,
+    vault_output_path: str = "",
+    extra_frontmatter_json: str = "",
+) -> str:
     """
     Ingest a code repository into codelore — generates the vault and search index.
 
@@ -490,6 +494,11 @@ def ingest_repo(repo_path_or_url: str, vault_output_path: str = "") -> str:
     1. Generates AI summaries for every file and directory via Claude CLI
     2. Writes an Obsidian-compatible vault of markdown notes
     3. Indexes code chunks as developer questions into ChromaDB
+
+    extra_frontmatter_json — optional JSON object of extra fields to add to every
+    vault note's frontmatter, e.g. '{"project": "myapp", "status": "draft",
+    "tags": ["backend", "python"]}'. Strings, numbers, booleans, and flat lists
+    are all supported. These fields are merged after the built-in fields.
 
     After ingestion, the tool prints the vault and chroma paths. Pass these as
     vault_root and chroma_path to the query tools, or set them as env vars.
@@ -550,8 +559,17 @@ def ingest_repo(repo_path_or_url: str, vault_output_path: str = "") -> str:
             encoding="utf-8",
         )
 
-        index, all_nodes, warnings = build_tree(repo_root, file_summaries, dir_summaries)
-        write_vault(index, all_nodes, warnings, vault_root)
+        extra_fm: dict = {}
+        if extra_frontmatter_json.strip():
+            try:
+                extra_fm = json.loads(extra_frontmatter_json)
+                if not isinstance(extra_fm, dict):
+                    return "Error: extra_frontmatter_json must be a JSON object, e.g. '{\"project\": \"myapp\"}'"
+            except json.JSONDecodeError as e:
+                return f"Error parsing extra_frontmatter_json: {e}"
+
+        index, all_nodes, warnings = build_tree(repo_root, file_summaries, dir_summaries, extra_fm or None)
+        write_vault(index, all_nodes, warnings, vault_root, extra_fm or None)
 
         chroma_client = chromadb.PersistentClient(path=str(chroma_path))
         collection = get_or_create_collection(chroma_client)
@@ -577,13 +595,23 @@ def ingest_repo(repo_path_or_url: str, vault_output_path: str = "") -> str:
 
 # not sure if this is like a 'lint' func where only new files are put thru the claude --print stuff
 @mcp.tool()
-def rebuild_vault(repo_path: str, explanations_json_path: str, vault_output_path: str = "") -> str:
+def rebuild_vault(
+    repo_path: str,
+    explanations_json_path: str,
+    vault_output_path: str = "",
+    extra_frontmatter_json: str = "",
+) -> str:
     """
     Rebuild the vault and search index from an existing explanations file.
 
     Use this to re-run vault generation WITHOUT making any Claude CLI calls for
     file summaries. Useful when you want to re-index after code changes but
     already have summaries, or to iterate on vault structure without LLM cost.
+
+    extra_frontmatter_json — optional JSON object of extra fields to add to every
+    vault note's frontmatter, e.g. '{"project": "myapp", "status": "draft",
+    "tags": ["backend", "python"]}'. Strings, numbers, booleans, and flat lists
+    are all supported.
 
     Note: ChromaDB question generation still calls Claude once per chunk —
     only the file/directory summaries are skipped (they're loaded from JSON).
@@ -617,8 +645,17 @@ def rebuild_vault(repo_path: str, explanations_json_path: str, vault_output_path
 
     chroma_path = vault_root.parent / f"{repo_root.name}_chroma"
 
-    index, all_nodes, warnings = build_tree(repo_root, file_summaries, dir_summaries)
-    write_vault(index, all_nodes, warnings, vault_root)
+    extra_fm: dict = {}
+    if extra_frontmatter_json.strip():
+        try:
+            extra_fm = json.loads(extra_frontmatter_json)
+            if not isinstance(extra_fm, dict):
+                return "Error: extra_frontmatter_json must be a JSON object, e.g. '{\"project\": \"myapp\"}'"
+        except json.JSONDecodeError as e:
+            return f"Error parsing extra_frontmatter_json: {e}"
+
+    index, all_nodes, warnings = build_tree(repo_root, file_summaries, dir_summaries, extra_fm or None)
+    write_vault(index, all_nodes, warnings, vault_root, extra_fm or None)
 
     all_files = collect_files(repo_root)
     file_code_pairs = [
