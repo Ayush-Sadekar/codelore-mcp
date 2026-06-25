@@ -1,13 +1,8 @@
 {
-    "mcpServers": {
-      "codelore": {
-        "command": "/Users/ayush/Desktop/codelore-clone/venv/bin/python",
-        "args": ["/Users/ayush/Desktop/codelore-clone/mcp_server.py"],
-        "env": {
-          "CODELORE_VAULT_ROOT": "/Users/ayush/Desktop/codelore-clone/obsidian_init/codelore-clone_vault",
-          "CODELORE_CHROMA_PATH": "/Users/ayush/Desktop/codelore-clone/obsidian_init/codelore-clone_chroma",
-          "CODELORE_REPO_ROOT": "/Users/ayush/Desktop/codelore-clone"
-        }
-      }
+  "mcpServers": {
+    "codelore": {
+      "command": "uv",
+      "args": ["run", "--project", ".", "codelore-mcp"]
     }
   }
+}

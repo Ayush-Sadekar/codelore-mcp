@@ -49,6 +49,9 @@ Issues = "https://github.com/ayushsadekar3/codelore/issues"
 codelore = "codelore.main:main"
 codelore-mcp = "mcp_server:mcp.run"
 
+[tool.setuptools]
+py-modules = ["mcp_server"]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["codelore*"]

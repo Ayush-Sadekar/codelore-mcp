@@ -49,6 +49,8 @@ Or from source:
 ```bash
 git clone https://github.com/yourname/codelore
 cd codelore
+python -m venv venv
+source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -e .
 ```
 
@@ -113,24 +115,46 @@ Prints step-by-step setup instructions and a ready-to-paste MCP config block.
 
 After ingesting, add codelore as an MCP server so Claude Code can call it as tools.
 
-Add to `.claude/settings.json` (project) or `~/.claude/settings.json` (global):
+If you cloned the repo, the project already includes `.claude/mcp.json` with a portable config that uses `uv` to launch the server. Just make sure [`uv`](https://docs.astral.sh/uv/) is installed and the MCP server will start automatically when you open the project in Claude Code.
 
+To set it up manually, add to `.claude/mcp.json` (project) or `~/.claude/mcp.json` (global):
+
+**Option A — with `uv` (recommended, no venv management needed):**
 ```json
 {
   "mcpServers": {
     "codelore": {
-      "command": "codelore-mcp",
-      "env": {
-        "CODELORE_VAULT_ROOT": "/path/to/your-repo_vault",
-        "CODELORE_CHROMA_PATH": "/path/to/your-repo_chroma",
-        "CODELORE_REPO_ROOT": "/path/to/your-repo"
-      }
+      "command": "uv",
+      "args": ["run", "--project", "/path/to/codelore", "codelore-mcp"]
     }
   }
 }
 ```
 
-`codelore init` will generate this block with your actual paths filled in.
+**Option B — with pip (after `pip install -e .` in a venv):**
+```json
+{
+  "mcpServers": {
+    "codelore": {
+      "command": "/path/to/codelore/venv/bin/codelore-mcp"
+    }
+  }
+}
+```
+
+Both options work without environment variables — the tools accept `vault_root`, `chroma_path`, and `repo_root` as per-call parameters. To avoid passing them every time, add an `env` block:
+
+```json
+{
+  "env": {
+    "CODELORE_VAULT_ROOT": "/path/to/your-repo_vault",
+    "CODELORE_CHROMA_PATH": "/path/to/your-repo_chroma",
+    "CODELORE_REPO_ROOT": "/path/to/your-repo"
+  }
+}
+```
+
+`codelore init` will generate a ready-to-paste config with your actual paths filled in.
 
 ### Available MCP tools
 
