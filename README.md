@@ -32,6 +32,7 @@ Claude Code reads `INDEX.md → directory notes → file notes` via the `explore
 ## Prerequisites
 
 - **Python 3.11+**
+- **[`uv`](https://docs.astral.sh/uv/getting-started/installation/)** — used to run the MCP server and manage dependencies
 - **Claude Code CLI** — [claude.ai/download](https://claude.ai/download)
   ```
   claude --version   # must be on PATH
@@ -49,8 +50,13 @@ Or from source:
 ```bash
 git clone https://github.com/yourname/codelore
 cd codelore
-python -m venv venv
-source venv/bin/activate   # Windows: venv\Scripts\activate
+uv sync          # creates .venv/ and installs all dependencies
+```
+
+If you prefer pip over uv:
+```bash
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e .
 ```
 
@@ -115,38 +121,32 @@ Prints step-by-step setup instructions and a ready-to-paste MCP config block.
 
 After ingesting, add codelore as an MCP server so Claude Code can call it as tools.
 
-If you cloned the repo, the project already includes `.claude/mcp.json` with a portable config that uses `uv` to launch the server. Just make sure [`uv`](https://docs.astral.sh/uv/) is installed and the MCP server will start automatically when you open the project in Claude Code.
+If you cloned the repo, it already includes a `.mcp.json` at the project root that launches the server via `uv`. Just make sure `uv` is installed and run `uv sync` — the MCP server will start automatically when you open the project in Claude Code.
 
-To set it up manually, add to `.claude/mcp.json` (project) or `~/.claude/mcp.json` (global):
+To set it up manually for a different project, create a `.mcp.json` in the project root:
 
-**Option A — with `uv` (recommended, no venv management needed):**
 ```json
 {
   "mcpServers": {
     "codelore": {
       "command": "uv",
-      "args": ["run", "--project", "/path/to/codelore", "codelore-mcp"]
+      "args": ["run", "codelore-mcp"],
+      "env": {
+        "VIRTUAL_ENV": ""
+      }
     }
   }
 }
 ```
 
-**Option B — with pip (after `pip install -e .` in a venv):**
-```json
-{
-  "mcpServers": {
-    "codelore": {
-      "command": "/path/to/codelore/venv/bin/codelore-mcp"
-    }
-  }
-}
-```
+The `"VIRTUAL_ENV": ""` clears any activated venv so `uv` uses its own `.venv/` without conflicts.
 
-Both options work without environment variables — the tools accept `vault_root`, `chroma_path`, and `repo_root` as per-call parameters. To avoid passing them every time, add an `env` block:
+All tools accept `vault_root`, `chroma_path`, and `repo_root` as per-call parameters. To avoid passing them every time, add them to the `env` block:
 
 ```json
 {
   "env": {
+    "VIRTUAL_ENV": "",
     "CODELORE_VAULT_ROOT": "/path/to/your-repo_vault",
     "CODELORE_CHROMA_PATH": "/path/to/your-repo_chroma",
     "CODELORE_REPO_ROOT": "/path/to/your-repo"

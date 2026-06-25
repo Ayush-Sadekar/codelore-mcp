@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "codelore": {
-      "command": "uv",
-      "args": ["run", "--project", ".", "codelore-mcp"]
-    }
-  }
-}

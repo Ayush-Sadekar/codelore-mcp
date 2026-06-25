@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "codelore": {
+      "command": "uv",
+      "args": ["run", "codelore-mcp"],
+      "env": {
+        "VIRTUAL_ENV": ""
+      }
+    }
+  }
+}
