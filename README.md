@@ -172,9 +172,23 @@ codelore generates an Obsidian-compatible vault, and several codelore tools are 
 
 ### Setup
 
-1. Install the Obsidian Local REST API plugin: [github.com/coddingtonbear/obsidian-local-rest-api](https://github.com/coddingtonbear/obsidian-local-rest-api)
-2. Enable it in Obsidian and note the API key and port it starts on.
-3. Add it as a second MCP server alongside codelore in your Claude Code config.
+1. Install the [Obsidian Local REST API](https://github.com/coddingtonbear/obsidian-local-rest-api) plugin in Obsidian.
+2. Enable the plugin and copy the API key from its settings.
+3. Add the following to your `.mcp.json` alongside the codelore entry:
+
+```json
+{
+  "mcpServers": {
+    "obsidian": {
+      "type": "http",
+      "url": "http://127.0.0.1:27123/mcp/",
+      "headers": {
+        "Authorization": "Bearer <your-api-key>"
+      }
+    }
+  }
+}
+```
 
 Once both MCP servers are running, Claude will automatically use them together:
 - `search_code` (codelore) → falls back to `search_simple` (Obsidian MCP) → falls back to raw file grep
