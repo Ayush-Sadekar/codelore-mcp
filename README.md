@@ -43,21 +43,10 @@ Claude Code reads `INDEX.md → directory notes → file notes` via the `explore
 ## Install
 
 ```bash
-pip install codelore
-```
-
-Or from source:
-```bash
 git clone https://github.com/yourname/codelore
 cd codelore
-uv sync          # creates .venv/ and installs all dependencies
-```
-
-If you prefer pip over uv:
-```bash
-python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e .
+uv sync                        # creates .venv/ and installs all dependencies
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
 ```
 
 ---
