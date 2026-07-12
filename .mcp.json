@@ -11,7 +11,7 @@
       "type": "http",
       "url": "http://127.0.0.1:27123/mcp/",
       "headers": {
-        "Authorization": "Bearer <your-api-key>"
+        "Authorization": "Bearer <YOUR_OBSIDIAN_API_KEY>"
       }
     }
   }

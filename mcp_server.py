@@ -93,14 +93,16 @@ def search_code(
     behaviour. Searches a question-indexed vector database and returns the most
     relevant code chunks together with their vault summary.
 
-    FALLBACK CHAIN — if this tool returns no results or low-confidence matches:
-      1. Call the Obsidian MCP `search_simple` tool with the same query for a
-         plain-text search across vault notes.
-      2. If still no results, fall back to grepping the actual source files in
-         the repo (use repo_root from CODELORE_REPO_ROOT).
+    FALLBACK — if this tool returns no results or low-confidence matches, call
+    the Obsidian MCP `search_simple` tool with the same query for a plain-text
+    search across vault notes. Do not fall back to grepping the repo's source
+    files — the vault is the sole source of truth for search; rely on the
+    Obsidian MCP tools for it.
 
     After finding results, use the Obsidian MCP `vault_read` tool to read full
-    vault notes — prefer it over `read_vault_node` for direct file reading.
+    vault notes — try the vault-relative path first, and fall back to the
+    absolute path if the Obsidian MCP rejects it (path format depends on how
+    the Obsidian MCP server resolves paths against the vault root).
 
     GUARDRAIL: Never call the Obsidian MCP `vault_write` tool unless the user
     explicitly requests it by name.
@@ -117,44 +119,26 @@ def search_code(
     lines: list[str] = []
     for i, r in enumerate(results, 1):
         vault_md = Path(r.markdown_path)
-        summary_snippet = ""
-        if vault_md.exists():
-            content = vault_md.read_text(encoding="utf-8")
-            in_body = False
-            for line in content.splitlines():
-                if line.startswith("## ") and not in_body:
-                    in_body = True
-                    continue
-                if in_body and line.strip() and not line.startswith("#") and not line.startswith("---"):
-                    summary_snippet = line.strip()[:300]
-                    break
-
+        rel_path = vault_md.relative_to(vr) if vault_md.is_relative_to(vr) else vault_md
         lines.append(
             f"### Result {i} (distance: {r.distance:.3f})\n"
             f"**File:** `{r.file_path}` lines {r.start_line}–{r.end_line}\n"
             f"**Matched question:** {r.question}\n"
-            f"**Vault summary:** {summary_snippet or '_(no summary)_'}\n"
-            f"**Vault note:** `{r.markdown_path}`"
+            f"**Vault note (relative):** `{rel_path}`\n"
+            f"**Vault note (absolute):** `{vault_md}`\n"
+            f"Use the Obsidian MCP `vault_read` tool on one of these paths for the summary."
         )
     return "\n\n".join(lines)
 
 
-@mcp.tool()
+# DEPRECATED — not registered as an MCP tool. The Obsidian MCP `vault_read`
+# tool is now the sole path for reading vault notes. Left here, unregistered,
+# so it can be re-enabled with @mcp.tool() if the Obsidian MCP proves
+# unreliable.
 def read_vault_node(node_path: str, vault_root: str = "") -> str:
     """
-    DEPRECATED — prefer the Obsidian MCP `vault_read` tool for direct vault
-    file reading. `vault_read` reads the file straight from the Obsidian vault
-    and is the canonical way to fetch a note going forward.
-
-    This tool remains available as a fallback when the Obsidian MCP is not
-    configured or when you need vault_root path resolution. Use it only if
-    `vault_read` is unavailable.
-
     Reads a single node from the vault by its path. Pass paths like
     'INDEX', 'src/utils', or 'src/utils/helpers' (no .md extension needed).
-
-    GUARDRAIL: Never call the Obsidian MCP `vault_write` tool unless the user
-    explicitly requests it by name.
 
     vault_root is optional — omit to use the CODELORE_VAULT_ROOT env var, or
     pass it explicitly to read from a different repo's vault.
@@ -178,7 +162,7 @@ def explore_repo(max_depth: int = 2, vault_root: str = "") -> str:
     at increasing depth so you can understand the repo from the top down.
 
     To drill into a specific node after this overview, use the Obsidian MCP
-    `vault_read` tool (preferred) or `read_vault_node` (fallback).
+    `vault_read` tool.
 
     GUARDRAIL: Never call the Obsidian MCP `vault_write` tool unless the user
     explicitly requests it by name.
@@ -345,8 +329,11 @@ def vault_append(
     Never call the Obsidian MCP `vault_write` tool unless the user explicitly
     requests it by name — `vault_write` overwrites the entire file.
 
-    Returns the resolved vault note path and a short summary of the note's
-    existing content so you can craft a contextual append.
+    Returns the resolved vault note path (both relative and absolute forms —
+    try the relative one first, and fall back to the absolute one if the
+    Obsidian MCP rejects it) so you can craft a contextual append. Use the
+    Obsidian MCP `vault_read` tool on that path first to see the note's
+    existing content before appending.
 
     vault_root and chroma_path are optional — omit to use env vars.
     """
@@ -359,23 +346,14 @@ def vault_append(
         )
 
     vr = _vault_root(vault_root)
-    best = results[0]
-    vault_md = Path(best.markdown_path)
-
-    existing_snippet = ""
-    if vault_md.exists():
-        content = vault_md.read_text(encoding="utf-8")
-        lines = content.splitlines()
-        existing_snippet = "\n".join(lines[:20])
-
+    vault_md = Path(results[0].markdown_path)
     rel_path = vault_md.relative_to(vr) if vault_md.is_relative_to(vr) else vault_md
     return (
-        f"**Target vault note:** `{rel_path}`\n"
-        f"**Full path:** `{vault_md}`\n\n"
-        f"**Existing content (first 20 lines):**\n```\n{existing_snippet}\n```\n\n"
+        f"**Target vault note (relative):** `{rel_path}`\n"
+        f"**Target vault note (absolute):** `{vault_md}`\n\n"
         f"Next steps:\n"
-        f"1. Use Obsidian MCP `vault_read` to read the full note if needed.\n"
-        f"2. Use Obsidian MCP `vault_append` with path `{rel_path}` to add your content.\n"
+        f"1. Use Obsidian MCP `vault_read` with one of the paths above to see the note's existing content.\n"
+        f"2. Use Obsidian MCP `vault_append` with the same path to add your content.\n"
         f"   `vault_append` is safe — it appends only and never overwrites."
     )
 
@@ -692,15 +670,19 @@ def sync_vault(
     SHA saved during the last ingest_repo run.
 
     dry_run=True (default): reports changed, new, and deleted files — no changes made.
-    dry_run=False: re-ingests changed/new files and removes deleted ones.
+    dry_run=False: for each modified file, regenerates its summary and asks Claude
+    whether it's a REAL conflict vs. the existing vault note (not just phrasing/
+    comment/formatting drift). Only real conflicts replace the note and reindex
+    that file's ChromaDB questions — everything else is left as-is. Either way,
+    the vault note gets a Sync Log entry noting the commit that was checked.
+    New files are ingested for the first time; deleted files are removed.
 
     Always run with dry_run=True first to review the change set, then call
     again with dry_run=False to apply. Requires the repo to be a git repository.
     """
-    from codelore.explain import summarize_files, index_repo_questions
-    from codelore.ingest import build_tree, write_vault
     from codelore.generate_questions import get_or_create_collection
     from codelore.parsers import REGISTRY
+    from codelore.sync import sync_modified_file, sync_new_file
 
     repo_root = Path(repo_path).resolve()
     if not repo_root.is_dir():
@@ -777,32 +759,27 @@ def sync_vault(
     chroma_client = chromadb.PersistentClient(path=str(cp))
     collection = get_or_create_collection(chroma_client)
 
-    # Re-ingest changed and new files.
-    upsert_pairs: list[tuple[Path, str]] = []
-    for rel in modified_paths + new_paths:
+    # Modified files: regenerate the summary, judge it against the existing
+    # note, and only replace the note + reindex questions on a real conflict.
+    n_conflicts = 0
+    n_no_conflict = 0
+    for rel in modified_paths:
         abs_path = repo_root / rel
         if not abs_path.exists():
             continue
-        code = abs_path.read_text(encoding="utf-8", errors="ignore").strip()
-        if code:
-            upsert_pairs.append((abs_path, code))
+        result = sync_modified_file(repo_root, vr, collection, rel, current_sha, file_summaries.get(rel, ""))
+        if result.had_conflict:
+            n_conflicts += 1
+            file_summaries[rel] = result.new_summary
+        else:
+            n_no_conflict += 1
 
-    if upsert_pairs:
-        new_summaries = summarize_files(upsert_pairs, repo_root)
-        file_summaries.update(new_summaries)
-
-        # Rebuild vault notes only for the changed files (full build_tree is used
-        # so the import graph stays consistent, but only touched .md files are rewritten).
-        index, all_nodes, warnings = build_tree(repo_root, file_summaries, dir_summaries)
-        write_vault(index, all_nodes, warnings, vr)
-
-        # Delete old ChromaDB entries for these files, then re-index.
-        for abs_path, _ in upsert_pairs:
-            collection.delete(where={"file_path": str(abs_path)})
-        n_new = index_repo_questions(repo_root, vr, upsert_pairs, collection)
-    else:
-        n_new = 0
-        warnings = []
+    # New files: first-time generation + indexing, no conflict to judge.
+    for rel in new_paths:
+        abs_path = repo_root / rel
+        if not abs_path.exists():
+            continue
+        file_summaries[rel] = sync_new_file(repo_root, vr, collection, rel, current_sha)
 
     # Remove deleted files from vault and ChromaDB.
     for rel in deleted_paths:
@@ -825,11 +802,11 @@ def sync_vault(
     return (
         f"## Sync complete\n\n"
         f"**Repo:** `{repo_root}`\n"
-        f"**Modified/new files re-ingested:** {len(upsert_pairs)}\n"
+        f"**Modified files with real conflicts (note + questions updated):** {n_conflicts}\n"
+        f"**Modified files with no conflict (note left as-is, commit logged):** {n_no_conflict}\n"
+        f"**New files ingested:** {len(new_paths)}\n"
         f"**Deleted files removed:** {len(deleted_paths)}\n"
-        f"**New questions indexed:** {n_new}\n"
         f"**SHA advanced:** `{saved_sha[:8]}` → `{current_sha[:8]}`\n"
-        + (f"**Warnings:** {len(warnings)}\n" if warnings else "")
     )
 
 

@@ -1,3 +1,4 @@
+import re
 import shutil
 import subprocess
 import sys
@@ -46,6 +47,50 @@ Generate your response in the exact Markdown layout specified below. Do not add 
 
 [Repeat the '###' block structure above for the next class, method, or function until the file is completely mapped.]\
 """
+
+
+FILE_CONFLICT_PROMPT = """\
+You are a meticulous Technical Reviewer comparing two versions of an architecture note for the same file.
+
+File: {file_path}
+
+EXISTING note (from a previous version of the file):
+{old_note}
+
+NEWLY GENERATED note (from the current version of the file):
+{new_note}
+
+Decide whether the new note reflects a REAL, MEANINGFUL change in behavior, structure, contracts, or dependencies -- not just LLM phrasing differences, comment/formatting changes, or non-behavioral renames.
+
+Respond in EXACTLY this format, nothing else:
+CONFLICT: yes|no
+REASON: <a couple of sentences>
+"""
+
+
+def judge_file_conflict(file_path: str, old_note: str, new_note: str) -> tuple[bool, str]:
+    """
+    Ask Claude whether new_note represents a real, meaningful change vs old_note.
+
+    Returns (has_conflict, reason). If the response can't be parsed, defaults to
+    has_conflict=True so a real change is never silently dropped.
+    """
+    prompt = FILE_CONFLICT_PROMPT.format(
+        file_path=file_path,
+        old_note=old_note,
+        new_note=new_note,
+    )
+    raw = _call_claude(prompt)
+
+    conflict_match = re.search(r"CONFLICT:\s*(yes|no)", raw, re.IGNORECASE)
+    reason_match = re.search(r"REASON:\s*(.+)", raw, re.IGNORECASE | re.DOTALL)
+
+    if not conflict_match:
+        return True, "Could not parse conflict verdict from Claude's response; defaulting to conflict."
+
+    has_conflict = conflict_match.group(1).strip().lower() == "yes"
+    reason = reason_match.group(1).strip() if reason_match else ""
+    return has_conflict, reason
 
 
 def check_claude_cli() -> None:

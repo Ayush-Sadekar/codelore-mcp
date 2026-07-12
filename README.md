@@ -153,7 +153,6 @@ All tools accept `vault_root`, `chroma_path`, and `repo_root` as per-call parame
 | `explore_repo` | "explain this codebase", "give me an overview" |
 | `find_todos` | "what's left to implement?", "show open tasks" |
 | `vault_append` | "add a note about X", "append my findings to the auth module" |
-| `read_vault_node` | _(deprecated — use Obsidian MCP `vault_read` instead)_ |
 | `read_guidelines` | architectural guidelines doc (optional) |
 | `estimate_cost` | "how many claude calls would this take?" |
 | `ingest_repo` | "ingest this repo" |
@@ -166,7 +165,7 @@ All tools accept `vault_root`, `chroma_path`, and `repo_root` as per-call parame
 
 codelore generates an Obsidian-compatible vault, and several codelore tools are designed to hand off to the **Obsidian Local REST API MCP** for direct vault operations. Setting this up unlocks:
 
-- **`vault_read`** — read any vault note directly (replaces the deprecated `read_vault_node`)
+- **`vault_read`** — read any vault note directly (the sole path for reading vault notes; codelore's `read_vault_node` is unregistered/disabled for now and can be restored if the Obsidian MCP proves unreliable)
 - **`vault_append`** — safely append notes to existing vault files without overwriting
 - **`search_simple`** — plain-text search across your vault as a fallback when semantic search returns no results
 
