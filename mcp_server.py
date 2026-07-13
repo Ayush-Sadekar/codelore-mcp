@@ -40,7 +40,33 @@ from codelore.query.retrieval import (
     search_chunks,
 )
 
-mcp = FastMCP("codelore")
+SERVER_INSTRUCTIONS = """\
+codelore answers questions about a specific TARGET repo — configured via
+CODELORE_VAULT_ROOT / CODELORE_CHROMA_PATH / CODELORE_REPO_ROOT env vars or
+per-call overrides. That target repo is NOT necessarily the current working
+directory of this session.
+
+For codebase questions (architecture, "how does X work", "where is Y
+defined", open TODOs), prefer search_code / explore_repo / find_todos over
+ad hoc Read/Grep/Bash on the working directory — those tools query the
+correct target repo's vault and index directly. If a tool call fails because
+scope looks misconfigured (e.g. it resolves inside codelore's own source),
+do not silently fall back to grepping cwd — ask the user which repo they
+mean, or call get_active_scope to see current resolution state.
+
+Vault notes are AI-generated summaries and can lag behind the current code
+(sync_vault intentionally leaves a note unchanged when a diff is judged
+non-behavioral). If the vault doesn't have enough detail to answer precisely
+— exact signatures, current line numbers, anything the summary doesn't cover
+— use Read/Grep/Bash directly on the repo that corresponds to the vault
+(repo_root, as resolved by get_active_scope or CODELORE_REPO_ROOT, or the
+absolute file_path a search_code result already gives you) rather than
+guessing from the summary. This is different from grepping the working
+directory blind: it's targeted reading of the specific repo codelore is
+scoped to, once you know where that repo is.
+"""
+
+mcp = FastMCP("codelore", instructions=SERVER_INSTRUCTIONS)
 
 
 # ---------------------------------------------------------------------------
@@ -62,16 +88,64 @@ def _require_env(name: str) -> str:
     return val
 
 
+_CODELORE_PKG_DIR = Path(__file__).resolve().parent
+
+
+def _check_not_self_scope(label: str, resolved: str) -> str:
+    p = Path(resolved).resolve()
+    if p == _CODELORE_PKG_DIR or _CODELORE_PKG_DIR in p.parents:
+        raise RuntimeError(
+            f"codelore: resolved {label} ('{resolved}') points inside codelore's "
+            "own source tree. This usually means CODELORE_REPO_ROOT/VAULT_ROOT/"
+            "CHROMA_PATH are misconfigured or unset for the repo you actually mean. "
+            "Ask the user to confirm which repo to target, or pass an explicit "
+            "override — do not fall back to reading the current working directory "
+            "directly. If you really do mean to introspect codelore itself, pass "
+            "the override explicitly to confirm intent."
+        )
+    return resolved
+
+
 def _vault_root(override: str = "") -> str:
-    return override.strip() or _require_env("CODELORE_VAULT_ROOT")
+    return _check_not_self_scope("vault_root", override.strip() or _require_env("CODELORE_VAULT_ROOT"))
 
 
 def _chroma_path(override: str = "") -> str:
-    return override.strip() or _require_env("CODELORE_CHROMA_PATH")
+    return _check_not_self_scope("chroma_path", override.strip() or _require_env("CODELORE_CHROMA_PATH"))
 
 
 def _repo_root(override: str = "") -> str:
-    return override.strip() or _require_env("CODELORE_REPO_ROOT")
+    return _check_not_self_scope("repo_root", override.strip() or _require_env("CODELORE_REPO_ROOT"))
+
+
+@mcp.tool()
+def get_active_scope(vault_root: str = "", chroma_path: str = "", repo_root: str = "") -> str:
+    """
+    Report which repo this codelore server is currently scoped to — useful to
+    sanity-check before a multi-step task, or to debug a misconfigured
+    .mcp.json. Not required before calling other tools: they already refuse
+    to resolve to codelore's own source on their own.
+    """
+    rows: list[str] = []
+
+    def _check(label: str, resolver, override: str) -> None:
+        try:
+            resolved = resolver(override)
+        except RuntimeError as e:
+            status = "SELF-SCOPE" if "own source tree" in str(e) else "MISSING"
+            rows.append(f"| `{label}` | _(unresolved)_ | {status}: {e} |")
+            return
+        rows.append(f"| `{label}` | `{resolved}` | OK |")
+
+    _check("vault_root", _vault_root, vault_root)
+    _check("chroma_path", _chroma_path, chroma_path)
+    _check("repo_root", _repo_root, repo_root)
+
+    return (
+        "## codelore active scope\n\n"
+        "| Field | Resolved value | Status |\n"
+        "|---|---|---|\n" + "\n".join(rows)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -95,9 +169,14 @@ def search_code(
 
     FALLBACK — if this tool returns no results or low-confidence matches, call
     the Obsidian MCP `search_simple` tool with the same query for a plain-text
-    search across vault notes. Do not fall back to grepping the repo's source
-    files — the vault is the sole source of truth for search; rely on the
-    Obsidian MCP tools for it.
+    search across vault notes; do not grep the repo's source as a substitute
+    for search — the vault is the source of truth for locating relevant code.
+
+    Once you've located relevant code via a result's `file_path` (an absolute
+    path into the target repo, not the vault), reading that file directly
+    with Read/Grep is expected and normal when you need exact/current detail
+    the vault summary doesn't cover — the vault summarizes, it doesn't
+    replace the source.
 
     After finding results, use the Obsidian MCP `vault_read` tool to read full
     vault notes — try the vault-relative path first, and fall back to the
@@ -110,6 +189,8 @@ def search_code(
     vault_root and chroma_path are optional — if omitted, the server uses the
     CODELORE_VAULT_ROOT and CODELORE_CHROMA_PATH environment variables. Pass
     them explicitly to query a different repo without reconfiguring the server.
+    Resolves against the configured target repo (see server instructions) —
+    not necessarily the current working directory.
     """
     results: list[ChunkResult] = search_chunks(query, _chroma_path(chroma_path), n_results)
     if not results:
@@ -169,6 +250,8 @@ def explore_repo(max_depth: int = 2, vault_root: str = "") -> str:
 
     vault_root is optional — omit to use CODELORE_VAULT_ROOT, or pass it
     explicitly to explore a different repo's vault without reconfiguring.
+    Resolves against the configured target repo (see server instructions) —
+    not necessarily the current working directory.
     """
     nodes: list[VaultNode] = bfs_vault(_vault_root(vault_root), "INDEX", max_depth)
     if not nodes:
@@ -235,7 +318,9 @@ def find_todos(
     explicitly requests it by name.
 
     vault_root, chroma_path, and repo_root are optional — omit to use env vars,
-    or pass them explicitly to query a different repo.
+    or pass them explicitly to query a different repo. Resolves against the
+    configured target repo (see server instructions) — not necessarily the
+    current working directory.
     """
     chroma = _chroma_path(chroma_path)
     repo = _repo_root(repo_root)

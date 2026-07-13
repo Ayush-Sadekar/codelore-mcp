@@ -151,6 +151,7 @@ All tools accept `vault_root`, `chroma_path`, and `repo_root` as per-call parame
 |---|---|
 | `search_code` | "how does X work?", "where is Y defined?" |
 | `explore_repo` | "explain this codebase", "give me an overview" |
+| `get_active_scope` | debugging `.mcp.json`, sanity-checking resolved paths |
 | `find_todos` | "what's left to implement?", "show open tasks" |
 | `vault_append` | "add a note about X", "append my findings to the auth module" |
 | `read_guidelines` | architectural guidelines doc (optional) |
