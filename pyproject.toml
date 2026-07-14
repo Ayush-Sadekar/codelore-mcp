@@ -45,6 +45,9 @@ dependencies = [
     "tree-sitter-cpp",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest"]
+
 [project.urls]
 Homepage = "https://github.com/ayushsadekar3/codelore"
 Repository = "https://github.com/ayushsadekar3/codelore"

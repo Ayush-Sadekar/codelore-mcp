@@ -2,6 +2,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -99,13 +100,34 @@ def check_claude_cli() -> None:
         sys.exit(1)
 
 
+_MAX_ATTEMPTS = 3
+_BACKOFF_SECONDS = (1, 2, 4)
+
+
 def _call_claude(prompt: str) -> str:
-    result = subprocess.run(
-        ["claude", "--print", prompt],
-        capture_output=True,
-        text=True,
+    """Run 'claude --print' with retry/backoff on failure.
+
+    Raises RuntimeError on persistent failure instead of returning empty/partial
+    output, so a broken subprocess call never gets silently written into the vault
+    as if it were a real summary.
+    """
+    last_error = ""
+    for attempt in range(_MAX_ATTEMPTS):
+        result = subprocess.run(
+            ["claude", "--print", prompt],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+        last_error = result.stderr.strip()
+        if attempt < _MAX_ATTEMPTS - 1:
+            time.sleep(_BACKOFF_SECONDS[attempt])
+
+    raise RuntimeError(
+        f"claude --print failed after {_MAX_ATTEMPTS} attempts (exit "
+        f"{result.returncode}): {last_error}"
     )
-    return result.stdout.strip()
 
 
 AGGREGATE_INDEX_PROMPT = """\

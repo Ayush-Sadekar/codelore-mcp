@@ -7,6 +7,11 @@ unit tests — it depends on how Claude Code, as the calling agent, reacts to
 the new `instructions=` text and tool descriptions, which only shows up in a
 real session.
 
+`uv run pytest` now covers the pure-logic layer (parsers, sync, `_call_claude`
+retry/error handling, MCP scope helpers) — this doc is scoped to what only a
+live Claude Code session can verify: agent tool-routing behavior, docstring
+adherence, and the actual `claude --print` / ChromaDB / git integration.
+
 ## Prerequisites
 
 - Clone this repo fresh (don't reuse a machine that already has stale

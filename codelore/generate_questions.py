@@ -5,12 +5,13 @@ Each chunk (function, class, block) produces a set of questions stored as
 separate ChromaDB documents so individual queries match the most relevant chunk.
 Metadata — not the document content — carries all location/path info.
 """
-import subprocess
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
 import chromadb
+
+from .llm import _call_claude
 
 QUESTION_PROMPT = (
     "You are an advanced technical parser. Read the following source code documentation chunk and generate numerous factual questions only. "
@@ -44,16 +45,7 @@ class ChunkMetadata:
     end_line: int         # 1-indexed, inclusive
     markdown_path: str    # absolute path to the .md summary for this file
 
-# calls claude code cli to generate the questions 
-def _call_claude(prompt: str) -> str:
-    result = subprocess.run(
-        ["claude", "--print", prompt],
-        capture_output=True,
-        text=True,
-    )
-    return result.stdout.strip()
-
-# parses claude's response to get the questions 
+# parses claude's response to get the questions
 def _parse_questions(raw: str) -> list[str]:
     questions = []
     for line in raw.splitlines():
