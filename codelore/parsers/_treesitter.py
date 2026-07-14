@@ -51,7 +51,7 @@ def ts_parse_chunks(
 
 
 def _walk(node, types: set[str], lines: list[str], out: list) -> None:
-    if node.type in types:
+    if node.is_named and node.type in types:
         start = node.start_point[0] + 1  # 1-indexed, inclusive
         end = node.end_point[0] + 1
         out.append((start, end, "\n".join(lines[start - 1:end])))

@@ -13,3 +13,8 @@ tree-sitter-haskell
 tree-sitter-elixir
 tree-sitter-lua
 tree-sitter-bash
+tree-sitter-ruby
+tree-sitter-rust
+tree-sitter-php
+tree-sitter-c
+tree-sitter-cpp

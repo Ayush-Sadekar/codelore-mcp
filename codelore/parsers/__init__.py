@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from . import csharp, dart, elixir, go, haskell, javascript, jvm, lua, python, r, shell
+from . import c, cpp, csharp, dart, elixir, go, haskell, javascript, jvm, lua, php, python, r, ruby, rust, shell
 
 
 def _whole_file_chunk(file_path: Path, repo_root: Path) -> list[tuple[int, int, str]]:
@@ -51,6 +51,21 @@ REGISTRY: dict[str, object] = {
     # R
     ".r": r.parse_imports,
     ".R": r.parse_imports,
+    # Ruby
+    ".rb": ruby.parse_imports,
+    # Rust
+    ".rs": rust.parse_imports,
+    # PHP
+    ".php": php.parse_imports,
+    # C
+    ".c": c.parse_imports,
+    ".h": c.parse_imports,
+    # C++
+    ".cpp": cpp.parse_imports,
+    ".cc": cpp.parse_imports,
+    ".cxx": cpp.parse_imports,
+    ".hpp": cpp.parse_imports,
+    ".hh": cpp.parse_imports,
     # Non-code files — no import semantics, but included for summarization + indexing
     ".md": _no_imports,
     ".json": _no_imports,
@@ -89,6 +104,17 @@ CHUNK_REGISTRY: dict[str, object] = {
     ".bash": shell.parse_chunks,
     ".r": _whole_file_chunk,      # no tree-sitter-r wheel for Python 3.13
     ".R": _whole_file_chunk,
+    # Tree-sitter chunkers for Ruby, Rust, PHP, C, C++
+    ".rb": ruby.parse_chunks,
+    ".rs": rust.parse_chunks,
+    ".php": php.parse_chunks,
+    ".c": c.parse_chunks,
+    ".h": c.parse_chunks,
+    ".cpp": cpp.parse_chunks,
+    ".cc": cpp.parse_chunks,
+    ".cxx": cpp.parse_chunks,
+    ".hpp": cpp.parse_chunks,
+    ".hh": cpp.parse_chunks,
     # Non-code files — whole-file chunks (no sub-structure to extract)
     ".md": _whole_file_chunk,
     ".json": _whole_file_chunk,
