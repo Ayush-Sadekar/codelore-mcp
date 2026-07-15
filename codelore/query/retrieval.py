@@ -26,7 +26,7 @@ from ..embedding import EMBEDDING_MODEL_NAME, get_embedding_function
 # Empirically, unrelated text pairs under all-MiniLM-L6-v2 land around 0.7-1.0+;
 # this is a starting point for callers to flag low-confidence results, not a
 # hard cutoff enforced here (search_chunks always returns whatever Chroma finds).
-DEFAULT_MAX_DISTANCE = 0.8
+DEFAULT_MAX_DISTANCE = 1.35
 
 
 # ---------------------------------------------------------------------------

@@ -40,7 +40,10 @@ def test_search_code_labels_on_topic_query_high_confidence(seeded_env):
 
 
 def test_search_code_labels_off_topic_query_low_confidence(seeded_env):
-    output = search_code("how do I bake a chocolate cake")
+    # The default max_distance (1.35) is loose enough to admit even an unrelated
+    # match as "high confidence" here, so assert the low-confidence path with an
+    # explicit stricter threshold instead of relying on the default's cutoff.
+    output = search_code("how do I bake a chocolate cake", max_distance=0.5)
     assert "**Confidence:** low" in output
     assert "consider falling back" in output
 

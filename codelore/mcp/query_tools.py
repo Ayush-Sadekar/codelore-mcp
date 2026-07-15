@@ -33,7 +33,7 @@ def search_code(
     relevant code chunks together with their vault summary.
 
     Each result is labeled Confidence: high or low based on whether its cosine
-    distance is within max_distance (default 0.8 — tune it lower for stricter
+    distance is within max_distance (default 1.35 — tune it lower for stricter
     matching, higher to allow more speculative results through).
 
     FALLBACK — if this tool returns no results or all results are labeled low
