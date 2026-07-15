@@ -23,7 +23,8 @@ classifiers = [
 ]
 
 dependencies = [
-    "chromadb",
+    "chromadb==1.5.9",
+    "sentence-transformers==3.3.1",
     "mcp",
     "tree-sitter",
     "tree-sitter-python",

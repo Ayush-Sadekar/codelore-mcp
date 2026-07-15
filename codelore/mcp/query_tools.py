@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 
 from codelore.query.retrieval import (
+    DEFAULT_MAX_DISTANCE,
     ChunkResult,
     VaultNode,
     bfs_vault,
@@ -21,6 +22,7 @@ def search_code(
     n_results: int = 5,
     vault_root: str = "",
     chroma_path: str = "",
+    max_distance: float = DEFAULT_MAX_DISTANCE,
 ) -> str:
     """
     Search the codebase using semantic similarity.
@@ -30,10 +32,15 @@ def search_code(
     behaviour. Searches a question-indexed vector database and returns the most
     relevant code chunks together with their vault summary.
 
-    FALLBACK — if this tool returns no results or low-confidence matches, call
-    the Obsidian MCP `search_simple` tool with the same query for a plain-text
-    search across vault notes; do not grep the repo's source as a substitute
-    for search — the vault is the source of truth for locating relevant code.
+    Each result is labeled Confidence: high or low based on whether its cosine
+    distance is within max_distance (default 0.8 — tune it lower for stricter
+    matching, higher to allow more speculative results through).
+
+    FALLBACK — if this tool returns no results or all results are labeled low
+    confidence, call the Obsidian MCP `search_simple` tool with the same query
+    for a plain-text search across vault notes; do not grep the repo's source
+    as a substitute for search — the vault is the source of truth for locating
+    relevant code.
 
     Once you've located relevant code via a result's `file_path` (an absolute
     path into the target repo, not the vault), reading that file directly
@@ -61,18 +68,29 @@ def search_code(
 
     vr = _vault_root(vault_root)
     lines: list[str] = []
+    all_low_confidence = True
     for i, r in enumerate(results, 1):
         vault_md = Path(r.markdown_path)
         rel_path = vault_md.relative_to(vr) if vault_md.is_relative_to(vr) else vault_md
+        is_confident = r.distance <= max_distance
+        all_low_confidence = all_low_confidence and not is_confident
+        confidence = "high" if is_confident else f"low (distance above {max_distance})"
         lines.append(
             f"### Result {i} (distance: {r.distance:.3f})\n"
+            f"**Confidence:** {confidence}\n"
             f"**File:** `{r.file_path}` lines {r.start_line}–{r.end_line}\n"
             f"**Matched question:** {r.question}\n"
             f"**Vault note (relative):** `{rel_path}`\n"
             f"**Vault note (absolute):** `{vault_md}`\n"
             f"Use the Obsidian MCP `vault_read` tool on one of these paths for the summary."
         )
-    return "\n\n".join(lines)
+
+    header = (
+        "_All results are below the confidence threshold — consider falling back "
+        "to the Obsidian MCP `search_simple` tool with the same query._\n\n"
+        if all_low_confidence else ""
+    )
+    return header + "\n\n".join(lines)
 
 
 # DEPRECATED — not registered as an MCP tool. The Obsidian MCP `vault_read`

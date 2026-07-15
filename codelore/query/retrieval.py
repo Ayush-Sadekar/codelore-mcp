@@ -20,6 +20,14 @@ from pathlib import Path
 
 import chromadb
 
+from ..embedding import EMBEDDING_MODEL_NAME, get_embedding_function
+
+# Cosine distance above which a search_chunks match is considered unreliable.
+# Empirically, unrelated text pairs under all-MiniLM-L6-v2 land around 0.7-1.0+;
+# this is a starting point for callers to flag low-confidence results, not a
+# hard cutoff enforced here (search_chunks always returns whatever Chroma finds).
+DEFAULT_MAX_DISTANCE = 0.8
+
 
 # ---------------------------------------------------------------------------
 # Data types
@@ -84,16 +92,46 @@ class CommitSummary:
 # actually look things up.
 # ---------------------------------------------------------------------------
 
+def _mismatch_error(chroma_path: str, detail: str) -> RuntimeError:
+    return RuntimeError(
+        f"codelore: the index at '{chroma_path}' can't be opened with the current "
+        f"embedding model ('{EMBEDDING_MODEL_NAME}'): {detail} "
+        "This is an index/embedding mismatch, NOT a repo-scope problem — "
+        "repo_root is still correct. Fall back to direct Read/Grep on repo_root "
+        "for this query, and consider re-running ingestion to rebuild the index "
+        "with the current embedding model."
+    )
+
+
 def _get_collection(chroma_path: str) -> chromadb.Collection:
     # PersistentClient reads/writes the ChromaDB SQLite store at chroma_path.
     # get_or_create_collection is safe to call repeatedly — it's idempotent.
-    # The cosine space is set here and must match what was used during ingestion
-    # (see generate_questions.py:get_or_create_collection).
+    # The cosine space and embedding function are set here and must match what
+    # was used during ingestion (see generate_questions.py:get_or_create_collection).
     client = chromadb.PersistentClient(path=chroma_path)
-    return client.get_or_create_collection(
-        name="code_chunks",
-        metadata={"hnsw:space": "cosine"},
-    )
+    try:
+        collection = client.get_or_create_collection(
+            name="code_chunks",
+            embedding_function=get_embedding_function(),
+            metadata={"hnsw:space": "cosine", "embedding_model": EMBEDDING_MODEL_NAME},
+        )
+    except ValueError as e:
+        # Newer chromadb tracks the embedding function used at collection-creation
+        # time and refuses get_or_create_collection outright on a conflict (e.g. an
+        # index built before this project pinned an explicit embedding function).
+        # Translate its generic message into one that tells the calling agent what
+        # to actually do, instead of a bare ValueError with no next step.
+        raise _mismatch_error(chroma_path, str(e)) from e
+
+    # Belt-and-suspenders for chromadb versions without the native conflict check
+    # above: collections created before embedding_model tracking existed won't
+    # have this field — treat "unknown" as unverifiable rather than a hard
+    # failure. Only raise when both sides are known and actually differ.
+    stored_model = collection.metadata.get("embedding_model") if collection.metadata else None
+    if stored_model and stored_model != EMBEDDING_MODEL_NAME:
+        raise _mismatch_error(chroma_path, f"index was built with '{stored_model}'.")
+
+    return collection
 
 
 def search_chunks(query: str, chroma_path: str, n_results: int = 5) -> list[ChunkResult]:

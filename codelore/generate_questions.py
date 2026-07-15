@@ -11,6 +11,7 @@ from pathlib import Path
 
 import chromadb
 
+from .embedding import EMBEDDING_MODEL_NAME, get_embedding_function
 from .llm import _call_claude
 
 QUESTION_PROMPT = (
@@ -118,5 +119,6 @@ def get_or_create_collection(
 ) -> chromadb.Collection:
     return client.get_or_create_collection(
         name=collection_name,
-        metadata={"hnsw:space": "cosine"},
+        embedding_function=get_embedding_function(),
+        metadata={"hnsw:space": "cosine", "embedding_model": EMBEDDING_MODEL_NAME},
     )
